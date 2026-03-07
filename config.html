@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoComp | Configurações</title>
+    <link rel="icon" type="image/png" href="img/logo.png"> <!-- favicon do site -->    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="index.html" class="logo-link">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Logo EcoComp" class="logo-img">
+                <div class="logo">Eco<span>Comp</span></div>
+            </div>
+        </a>
+
+        <ul class="nav-links">
+            <li><a href="index.html">Dashboard</a></li>
+            <li><a href="historico.html">Histórico</a></li>
+            <li><a href="config.html" class="active">Configurações</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <header class="header-main">
+            <h1>Controle e Configuração</h1>
+            <p>Gerencie os atuadores e defina os parâmetros de automação</p>
+        </header>
+
+        <h2 style="margin-bottom: 1rem; color: #1b4332;">Acionamento Manual</h2>
+        <section class="grid-cards">
+            
+            <div class="card">
+                <h3>Irrigação</h3>
+                <div class="status-bomba">
+                    <p>Bomba d'água:</p>
+                    <span id="status-bomba" class="badge off">DESLIGADA</span>
+                </div>
+                <button class="btn-manual" onclick="toggleDispositivo('bomba')">Alternar Bomba</button>
+            </div>
+
+            <div class="card">
+                <h3>Aquecimento</h3>
+                <div class="status-bomba">
+                    <p>Lâmpada Incandescente:</p>
+                    <span id="status-lampada" class="badge off">DESLIGADA</span>
+                </div>
+                <button class="btn-manual" onclick="toggleDispositivo('lampada')">Alternar Lâmpada</button>
+            </div>
+
+            <div class="card">
+                <h3>Resfriamento</h3>
+                <div class="status-bomba">
+                    <p>Ventoinha (Cooler):</p>
+                    <span id="status-ventoinha" class="badge off">DESLIGADA</span>
+                </div>
+                <button class="btn-manual" onclick="toggleDispositivo('ventoinha')">Alternar Ventoinha</button>
+            </div>
+
+        </section>
+
+        <h2 style="margin-bottom: 1rem; color: #1b4332; margin-top: 2rem;">Limites de Automação</h2>
+        <section class="card" style="text-align: left;">
+            <form id="form-config" class="config-form">
+                <div class="input-group">
+                    <label>Umidade mínima do solo para irrigar (%):</label>
+                    <input type="number" id="threshold-solo" value="40" min="0" max="100">
+                </div>
+                
+                <div class="input-group">
+                    <label>Temperatura máxima para resfriar (°C):</label>
+                    <input type="number" id="threshold-temp-max" value="32" min="0" max="50">
+                </div>
+
+                <div class="input-group">
+                    <label>Temperatura mínima para aquecer (°C):</label>
+                    <input type="number" id="threshold-temp-min" value="18" min="0" max="50">
+                </div>
+
+                <button type="button" class="btn-manual" style="margin-top: 1rem; background: #2d6a4f;" onclick="salvarConfig()">Salvar Parâmetros</button>
+            </form>
+        </section>
+    </main>
+
+        <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <div class="footer-brand">
+                    <img src="img/logo.png" alt="Logo Pequeno EcoComp" class="footer-logo-img">
+                    <p class="footer-title">Eco<span>Comp &copy;</span></p>
+                </div>
+                <p>Projeto em Engenharia de Computação II</p>
+            </div>
+
+            <div class="footer-section">
+                <p><strong>Orientador:</strong> Prof. Me. Hélio Esperidião</p>
+                <p>Monitoramento IoT - 2026</p>
+                <p><b>Desenvolvido por: </b>
+                <p><a href="mailto:ltrigo@univap.br" class="footer-link">Laura Trigo</a></p> <p><a
+                        href="mailto:josielytoledo@univap.br" class="footer-link">Josiely Toledo</a></p>
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="config.js"></script>
+</body>
+</html>
