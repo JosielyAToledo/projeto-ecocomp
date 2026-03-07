@@ -40,6 +40,18 @@ const mainChart = new Chart(ctx, {
   },
   options: {
     responsive: true,
+    plugins: {
+      legend: {
+        labels: {
+          usePointStyle: false,
+          boxWidth: 26,
+          boxHeight: 12,
+          padding: 14,
+          color: "#4b5563",
+          font: { size: 12, weight: "600" },
+        },
+      },
+    },
     scales: {
       y: {
         beginAtZero: true,
