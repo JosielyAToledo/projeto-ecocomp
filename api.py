@@ -1,71 +1,129 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from pymongo import MongoClient
-from datetime import datetime
-from fastapi.middleware.cors import CORSMiddleware # Importe isso
+from datetime import datetime, timedelta
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 app = FastAPI()
 
-# Configuração do CORS
+# --- CONFIGURAÇÃO DE CORS ---
+# Permite que seu site (frontend) se comunique com esta API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Em produção, o ideal é colocar a URL do seu site aqui
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# conexão MongoDB
+# --- CONEXÃO MONGODB ---
 MONGO_DETAILS = os.getenv("MONGO_URL")
+if not MONGO_DETAILS:
+    # Apenas para teste local se a variável de ambiente não estiver definida
+    MONGO_DETAILS = "mongodb://localhost:27017"
 
 client = MongoClient(MONGO_DETAILS)
 db = client.ecocomp
 collection = db.sensor_data
+config_collection = db.config  # Nova coleção para salvar thresholds
 
-
-# modelo dos dados recebidos
+# --- MODELOS DE DADOS (Pydantic) ---
 class SensorData(BaseModel):
     temperatura: float
     umidadeAr: float
     umidadeSolo: float
 
+class AtuadorData(BaseModel):
+    tipo: str
+    ativo: bool
 
-# rota POST para enviar dados
+class ConfigData(BaseModel):
+    soloMin: float
+    tempMax: float
+    tempMin: float
+
+# --- ROTAS DA API ---
+
+@app.get("/")
+async def home():
+    return {"status": "API EcoComp rodando", "versao": "1.2"}
+
+# 1. Receber dados do ESP32
 @app.post("/dados")
 async def receber_dados(data: SensorData):
-
     documento = {
         "temperatura": data.temperatura,
         "umidadeAr": data.umidadeAr,
         "umidadeSolo": data.umidadeSolo,
         "data_hora": datetime.utcnow()
     }
-
     try:
         resultado = collection.insert_one(documento)
-
-        return {
-            "status": "sucesso",
-            "id": str(resultado.inserted_id)
-        }
-
+        return {"status": "sucesso", "id": str(resultado.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 2. Histórico para o Gráfico (Rota que o JS chama)
+@app.get("/api/data")
+async def pegar_historico(days: int = Query(30)):
+    # Busca dados dos últimos 'x' dias
+    limite_data = datetime.utcnow() - timedelta(days=days)
+    
+    # Busca os últimos 1000 registros para não travar o gráfico
+    cursor = collection.find({"data_hora": {"$gte": limite_data}}).sort("data_hora", -1).limit(1000)
+    
+    dados_formatados = []
+    for d in cursor:
+        dados_formatados.append({
+            "createdAt": d["data_hora"].isoformat(),
+            "soil": d.get("umidadeSolo", 0),
+            "airHumidity": d.get("umidadeAr", 0),
+            "airTemp": d.get("temperatura", 0),
+            "soilExternal": d.get("umidadeSolo", 0) * 0.9, # Exemplo de dado externo
+            "tempExternal": d.get("temperatura", 0) - 2    # Exemplo de dado externo
+        })
+    return dados_formatados
 
-# rota GET para pegar dados
-@app.get("/dados")
-async def pegar_dados():
+# 3. Controle de Atuadores (Lâmpada, Bomba, Ventoinha)
+@app.post("/api/actuators")
+async def controlar_atuadores(data: AtuadorData):
+    # Aqui você pode salvar o estado atual em uma coleção 'status'
+    db.status.update_one(
+        {"id": "estado_atual"},
+        {"$set": {data.tipo: data.ativo, "last_update": datetime.utcnow()}},
+        upsert=True
+    )
+    return {"status": "comando_enviado", "dispositivo": data.tipo, "valor": data.ativo}
 
-    dados = list(collection.find().sort("data_hora", -1).limit(10))
+@app.get("/api/actuators")
+async def buscar_estado_atuadores():
+    estado = db.status.find_one({"id": "estado_atual"})
+    if not estado:
+        return {"bomba": False, "lampada": False, "ventoinha": False}
+    return {
+        "bomba": estado.get("bomba", False),
+        "lampada": estado.get("lampada", False),
+        "ventoinha": estado.get("ventoinha", False)
+    }
 
-    for d in dados:
-        d["_id"] = str(d["_id"])
+# 4. Configurações de Threshold
+@app.post("/api/config")
+async def salvar_config(data: ConfigData):
+    config_collection.update_one(
+        {"id": "thresholds"},
+        {"$set": data.dict()},
+        upsert=True
+    )
+    return {"status": "configuração salva"}
 
-    return dados
-
-
-@app.get("/")
-async def home():
-    return {"status": "API EcoComp rodando"}
+@app.get("/api/config")
+async def buscar_config():
+    cfg = config_collection.find_one({"id": "thresholds"})
+    if not cfg:
+        return {"soloMin": 40, "tempMax": 30, "tempMin": 18} # Valores padrão
+    return {
+        "soloMin": cfg.get("soloMin"),
+        "tempMax": cfg.get("tempMax"),
+        "tempMin": cfg.get("tempMin")
+    }
