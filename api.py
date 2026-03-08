@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 # --- CONEXÃO MONGODB ---
-MONGO_DETAILS = os.getenv("MONGO_URL")
+MONGO_DETAILS = os.getenv("MONGO_URI")
 if not MONGO_DETAILS:
     # Apenas para teste local se a variável de ambiente não estiver definida
     MONGO_DETAILS = "mongodb://localhost:27017"
@@ -30,9 +30,9 @@ config_collection = db.config  # Nova coleção para salvar thresholds
 
 # --- MODELOS DE DADOS (Pydantic) ---
 class SensorData(BaseModel):
-    temperatura: float
-    umidadeAr: float
-    umidadeSolo: float
+    soil: float
+    airHumidity: float
+    airTemp: float
 
 class AtuadorData(BaseModel):
     tipo: str
@@ -50,14 +50,14 @@ async def home():
     return {"status": "API EcoComp rodando", "versao": "1.2"}
 
 # 1. Receber dados do ESP32
-@app.post("/dados")
+@app.post("/api/data")
 async def receber_dados(data: SensorData):
     print(f"Recebendo dados: {data}") # Isso vai aparecer no log
     documento = {
-        "temperatura": data.temperatura,
-        "umidadeAr": data.umidadeAr,
-        "umidadeSolo": data.umidadeSolo,
-        "data_hora": datetime.utcnow()
+        "soil": data.soil,
+        "airHumidity": data.airHumidity,
+        "airTemp": data.airTemp,
+        "createdAt": datetime.utcnow()
     }
     try:
         # Tenta conectar e inserir
