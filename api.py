@@ -23,10 +23,10 @@ if not MONGO_DETAILS:
     # Apenas para teste local se a variável de ambiente não estiver definida
     MONGO_DETAILS = "mongodb://localhost:27017"
 
-client = MongoClient(MONGO_DETAILS)
-db = client.ecocomp
-collection = db.sensor_data
-config_collection = db.config  # Nova coleção para salvar thresholds
+client = MongoClient(MONGO_DETAILS, serverSelectionTimeoutMS=5000)
+db = client["ecocomp"]
+collection = db["sensor_data"]
+config_collection = db["config"]
 
 # --- MODELOS DE DADOS (Pydantic) ---
 class SensorData(BaseModel):
@@ -72,24 +72,25 @@ async def receber_dados(data: SensorData):
 # 2. Histórico para o Gráfico (Rota que o JS chama)
 @app.get("/api/data")
 async def pegar_historico(days: int = Query(30)):
-    # Busca dados dos últimos 'x' dias
+    
     limite_data = datetime.utcnow() - timedelta(days=days)
-    
-    # Busca os últimos 1000 registros para não travar o gráfico
-    cursor = collection.find({"createdAt": {"$gte": limite_data}}).sort("createdAt", -1).limit(1000)
-    
+
+    cursor = collection.find(
+        {"createdAt": {"$gte": limite_data}}
+    ).sort("createdAt", -1).limit(1000)
+
     dados_formatados = []
+
     for d in cursor:
         dados_formatados.append({
-            dados_formatados.append({
-                "createdAt": d["createdAt"].isoformat(),
-                "soil": d.get("soil", 0),
-                "airHumidity": d.get("airHumidity", 0),
-                "airTemp": d.get("airTemp", 0)
-            })
+            "createdAt": d["createdAt"].isoformat(),
+            "soil": d.get("soil", 0),
+            "airHumidity": d.get("airHumidity", 0),
+            "airTemp": d.get("airTemp", 0)
         })
-    return dados_formatados
 
+    return dados_formatados
+        
 # Rota para o site enviar o comando (Site -> API -> Banco)
 @app.post("/api/actuators")
 async def controlar_atuadores(data: dict): # Mudamos de AtuadorData para dict para ser mais flexível
@@ -130,7 +131,7 @@ async def buscar_estado_atuadores():
 async def salvar_config(data: ConfigData):
     config_collection.update_one(
         {"id": "thresholds"},
-        {"$set": data.dict()},
+        {"$set": data.model_dump()},
         upsert=True
     )
     return {"status": "configuração salva"}
