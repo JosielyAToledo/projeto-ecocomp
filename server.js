@@ -9,34 +9,176 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// conexão com MongoDB
+/* ================================
+   CONEXÃO COM MONGODB
+================================ */
+
 mongoose.connect(process.env.MONGODB_URI)
 .then(() => console.log("Mongo conectado"))
 .catch(err => console.log("Erro Mongo:", err));
 
-// schema dos dados da estufa
+/* ================================
+   SCHEMAS
+================================ */
+
+// leituras dos sensores
 const ReadingSchema = new mongoose.Schema({
-  soil: Number,        // umidade do solo
-  airHumidity: Number, // umidade do ar
-  airTemp: Number,     // temperatura do ar
+  soil: Number,
+  airHumidity: Number,
+  airTemp: Number,
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
 
-const Reading = mongoose.model("Reading", ReadingSchema);
-
-// rota de teste da API
-app.get("/health", (req,res)=>{
-  res.json({status:"ok"});
+// atuadores
+const ActuatorSchema = new mongoose.Schema({
+  bomba: { type: Boolean, default: false },
+  ventoinha: { type: Boolean, default: false },
+  lampada: { type: Boolean, default: false },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-// rota para salvar dados
-app.post("/api/data", async (req,res)=>{
+// configuração automática
+const ConfigSchema = new mongoose.Schema({
+  soloMin: Number,
+  tempMax: Number,
+  tempMin: Number
+});
+
+/* ================================
+   MODELS
+================================ */
+
+const Reading = mongoose.model("Reading", ReadingSchema);
+const Actuator = mongoose.model("Actuator", ActuatorSchema);
+const Config = mongoose.model("Config", ConfigSchema);
+
+/* ================================
+   ROTAS DE TESTE
+================================ */
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+/* ================================
+   ROTAS DE ATUADORES
+================================ */
+
+// atualizar estado
+app.post("/api/actuators", async (req, res) => {
   try {
 
-    const {soil, airHumidity, airTemp} = req.body;
+    const { tipo, ativo } = req.body;
+
+    let actuators = await Actuator.findOne();
+
+    if (!actuators) {
+      actuators = new Actuator();
+    }
+
+    actuators[tipo] = ativo;
+    actuators.updatedAt = new Date();
+
+    await actuators.save();
+
+    res.json({
+      message: "atuador atualizado",
+      actuators
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "erro ao atualizar atuador" });
+  }
+});
+
+// buscar estado (ESP32 usa isso)
+app.get("/api/actuators", async (req, res) => {
+  try {
+
+    let actuators = await Actuator.findOne();
+
+    if (!actuators) {
+      actuators = new Actuator();
+      await actuators.save();
+    }
+
+    res.json(actuators);
+
+  } catch (error) {
+    res.status(500).json({ erro: "erro ao buscar atuadores" });
+  }
+});
+
+/* ================================
+   ROTAS DE CONFIGURAÇÃO
+================================ */
+
+app.post("/api/config", async (req, res) => {
+  try {
+
+    const { soloMin, tempMax, tempMin } = req.body;
+
+    let config = await Config.findOne();
+
+    if (!config) {
+      config = new Config();
+    }
+
+    config.soloMin = soloMin;
+    config.tempMax = tempMax;
+    config.tempMin = tempMin;
+
+    await config.save();
+
+    res.json({
+      message: "configuração salva",
+      config
+    });
+
+  } catch (error) {
+    res.status(500).json({ erro: "erro ao salvar config" });
+  }
+});
+
+app.get("/api/config", async (req, res) => {
+  try {
+
+    let config = await Config.findOne();
+
+    if (!config) {
+
+      config = new Config({
+        soloMin: 40,
+        tempMax: 32,
+        tempMin: 18
+      });
+
+      await config.save();
+    }
+
+    res.json(config);
+
+  } catch (error) {
+    res.status(500).json({ erro: "erro ao buscar config" });
+  }
+});
+
+/* ================================
+   ROTAS DE SENSORES
+================================ */
+
+// salvar leitura (ESP32 envia)
+app.post("/api/data", async (req, res) => {
+  try {
+
+    const { soil, airHumidity, airTemp } = req.body;
 
     const data = new Reading({
       soil,
@@ -47,54 +189,46 @@ app.post("/api/data", async (req,res)=>{
     await data.save();
 
     res.json({
-      message:"dados salvos",
+      message: "dados salvos",
       data
     });
 
-  } catch(error) {
+  } catch (error) {
     console.error(error);
-    res.status(500).json({erro:"erro ao salvar dados"});
+    res.status(500).json({ erro: "erro ao salvar dados" });
   }
 });
 
-// rota para buscar dados
-app.get("/api/data", async (req,res)=>{
+// buscar histórico
+app.get("/api/data", async (req, res) => {
+
   try {
+
     const maxLimit = 10000;
     const rawLimit = Number(req.query.limit);
+
     const limit = Number.isFinite(rawLimit)
       ? Math.min(Math.max(rawLimit, 1), maxLimit)
       : 500;
 
     const query = {};
-    const days = Number(req.query.days);
-    const from = req.query.from ? new Date(req.query.from) : null;
-    const to = req.query.to ? new Date(req.query.to) : null;
-
-    if (Number.isFinite(days) && days > 0) {
-      const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      query.createdAt = { ...(query.createdAt || {}), $gte: start };
-    }
-    if (from instanceof Date && !Number.isNaN(from.getTime())) {
-      query.createdAt = { ...(query.createdAt || {}), $gte: from };
-    }
-    if (to instanceof Date && !Number.isNaN(to.getTime())) {
-      query.createdAt = { ...(query.createdAt || {}), $lte: to };
-    }
 
     const data = await Reading
       .find(query)
-      .sort({createdAt:-1})
+      .sort({ createdAt: -1 })
       .limit(limit);
 
     res.json(data);
 
-  } catch(error){
-    res.status(500).json({erro:"erro ao buscar dados"});
+  } catch (error) {
+    res.status(500).json({ erro: "erro ao buscar dados" });
   }
 });
 
-// iniciar servidor
-app.listen(PORT, ()=>{
-  console.log("Server rodando");
+/* ================================
+   INICIAR SERVIDOR
+================================ */
+
+app.listen(PORT, () => {
+  console.log("Server rodando na porta", PORT);
 });
