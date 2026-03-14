@@ -21,15 +21,24 @@ mongoose.connect(process.env.MONGODB_URI)
    SCHEMAS
 ================================ */
 
-// leituras dos sensores
-const ReadingSchema = new mongoose.Schema({
+// sub-schema para sensores
+const SensorSchema = new mongoose.Schema({
   soil: Number,
   airHumidity: Number,
-  airTemp: Number,
+  airTemp: Number
+});
+
+// leituras completas
+const ReadingSchema = new mongoose.Schema({
+
+  estufa: SensorSchema,
+  externo: SensorSchema,
+
   createdAt: {
     type: Date,
     default: Date.now
   }
+
 });
 
 // atuadores
@@ -70,7 +79,6 @@ app.get("/health", (req, res) => {
    ROTAS DE ATUADORES
 ================================ */
 
-// atualizar estado
 app.post("/api/actuators", async (req, res) => {
   try {
 
@@ -98,7 +106,6 @@ app.post("/api/actuators", async (req, res) => {
   }
 });
 
-// buscar estado (ESP32 usa isso)
 app.get("/api/actuators", async (req, res) => {
   try {
 
@@ -176,17 +183,25 @@ app.get("/api/config", async (req, res) => {
 
 // salvar leitura (ESP32 envia)
 app.post("/api/data", async (req, res) => {
+
   try {
 
-    const { soil, airHumidity, airTemp } = req.body;
+    const { estufa, externo } = req.body;
+
+    if (!estufa || !externo) {
+      return res.status(400).json({
+        erro: "dados inválidos"
+      });
+    }
 
     const data = new Reading({
-      soil,
-      airHumidity,
-      airTemp
+      estufa,
+      externo
     });
 
     await data.save();
+
+    console.log("Nova leitura recebida");
 
     res.json({
       message: "dados salvos",
@@ -194,12 +209,17 @@ app.post("/api/data", async (req, res) => {
     });
 
   } catch (error) {
+
     console.error(error);
-    res.status(500).json({ erro: "erro ao salvar dados" });
+
+    res.status(500).json({
+      erro: "erro ao salvar dados"
+    });
+
   }
 });
 
-// buscar histórico
+// histórico
 app.get("/api/data", async (req, res) => {
 
   try {
@@ -211,18 +231,21 @@ app.get("/api/data", async (req, res) => {
       ? Math.min(Math.max(rawLimit, 1), maxLimit)
       : 500;
 
-    const query = {};
-
     const data = await Reading
-      .find(query)
+      .find()
       .sort({ createdAt: -1 })
       .limit(limit);
 
     res.json(data);
 
   } catch (error) {
-    res.status(500).json({ erro: "erro ao buscar dados" });
+
+    res.status(500).json({
+      erro: "erro ao buscar dados"
+    });
+
   }
+
 });
 
 /* ================================
