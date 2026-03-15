@@ -219,15 +219,19 @@ app.get("/api/data", async (req, res) => {
       .limit(limit);
 
     const dadosFormatados = data.map(item => ({
+
       createdAt: item.createdAt,
 
-      soil: item.estufa?.soil ?? 0,
-      airHumidity: item.estufa?.airHumidity ?? 0,
-      airTemp: item.estufa?.airTemp ?? 0,
+      // ESTUFA
+      soil: item.estufa?.soil ?? item.soil ?? 0,
+      airHumidity: item.estufa?.airHumidity ?? item.airHumidity ?? 0,
+      airTemp: item.estufa?.airTemp ?? item.airTemp ?? 0,
 
+      // EXTERNO
       soilExternal: item.externo?.soil ?? 0,
       airHumidityExternal: item.externo?.airHumidity ?? 0,
       tempExternal: item.externo?.airTemp ?? 0
+
     }));
 
     res.json(dadosFormatados);
